@@ -33,6 +33,13 @@ private:
     S2BooleanOperation::Options m_options;
 };
 
+bool contains2(PyObjectGeography a, PyObjectGeography b, S2BooleanOperation::Options options) {
+    const auto& a_index = a.as_geog_ptr()->geog_index();
+    const auto& b_index = b.as_geog_ptr()->geog_index();
+
+    return s2geog::s2_contains(a_index, b_index, options);
+}
+
 void init_predicates(py::module& m) {
     m.def("intersects",
           py::vectorize(Predicate(s2geog::s2_intersects)),
@@ -110,6 +117,30 @@ void init_predicates(py::module& m) {
           R"pbdoc(
         Returns True if A boundaries and interior does not intersect at all
         with those of B.
+
+        Parameters
+        ----------
+        a, b : :py:class:`Geography` or array_like
+            Geography object(s)
+
+    )pbdoc");
+
+    struct S2Options {
+        explicit S2Options() : options{S2BooleanOperation::Options()} {}
+        S2BooleanOperation::Options options;
+    };
+    py::class_<S2Options>(m, "S2Options")
+        .def(py::init());
+
+    m.def("contains2", 
+          py::vectorize([](PyObjectGeography a, PyObjectGeography b, S2Options options) {
+             return contains2(a, b, options.options); }), 
+          py::arg("a"), py::arg("b"), py::arg("options") = S2Options(),
+          R"pbdoc(
+        Returns True if B is completely inside A.
+
+        A contains B if no points of B lie in the exterior of A and at least
+        one point of the interior of B lies in the interior of A.
 
         Parameters
         ----------
