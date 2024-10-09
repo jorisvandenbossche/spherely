@@ -1,5 +1,6 @@
 from packaging.version import Version
 
+import numpy as np
 import pyarrow as pa
 import geoarrow.pyarrow as ga
 
@@ -103,3 +104,29 @@ def test_from_geoarrow_invalid_encoding():
 
     with pytest.raises(ValueError, match="'geometry_encoding' should be one"):
         spherely.from_geoarrow(arr, geometry_encoding="point")
+
+
+def test_to_geoarrow():
+    arr = spherely.create([1, 2, 3], [1, 2, 3])
+    res = spherely.to_geoarrow(arr, geometry_encoding="points")
+    assert isinstance(res, spherely.ArrowArrayHolder)
+    assert hasattr(res, "__arrow_c_array__")
+
+    arr_pa = pa.array(res)
+    coords = np.asarray(arr_pa.storage.values)
+    expected = np.array([1, 1, 2, 2, 3, 3], dtype="float64")
+    np.testing.assert_allclose(coords, expected)
+
+
+def test_to_geoarrow_wkt():
+    arr = spherely.create([1, 2, 3], [1, 2, 3])
+    result = pa.array(spherely.to_geoarrow(arr, geometry_encoding="WKT"))
+    # TODO assert result
+    print(result)
+
+
+def test_to_geoarrow_wkb():
+    arr = spherely.create([1, 2, 3], [1, 2, 3])
+    result = pa.array(spherely.to_geoarrow(arr, geometry_encoding="WKB"))
+    # TODO assert result
+    print(result)
