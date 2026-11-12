@@ -2,11 +2,14 @@
 #define SPHERELY_GEOGRAPHY_H_
 
 #include <pybind11/pybind11.h>
+#include <s2geography/geoarrow-geography.h>
 #include <s2geography/geography.h>
 
 #include <exception>
 #include <memory>
 #include <string>
+
+#include "wkb_geoarrow.hpp"
 
 namespace py = pybind11;
 namespace s2geog = s2geography;
@@ -15,6 +18,7 @@ namespace spherely {
 
 using S2GeographyPtr = std::unique_ptr<s2geog::Geography>;
 using S2GeographyIndexPtr = std::unique_ptr<s2geog::ShapeIndexGeography>;
+using GeoArrowGeographyPtr = std::unique_ptr<s2geog::GeoArrowGeography>;
 
 /*
 ** The registered Geography types
@@ -48,6 +52,8 @@ public:
     Geography(const Geography&) = delete;
     Geography(Geography&& geog)
         : m_s2geog_ptr(std::move(geog.m_s2geog_ptr)),
+          m_wkb_geom_ptr(std::move(geog.m_wkb_geom_ptr)),
+          m_geoarrow_geog_ptr(std::move(geog.m_geoarrow_geog_ptr)),
           m_is_empty(geog.is_empty()),
           m_geog_type(geog.geog_type()) {}
 
@@ -58,9 +64,28 @@ public:
         extract_geog_properties();
     }
 
+    /*
+    ** Alternative constructor that builds a ``s2geography::GeoArrowGeography``
+    ** directly from a WKB buffer, instead of going through the
+    ** ``s2geography::Geography`` construction path above.
+    **
+    ** This parses ``wkb`` into a GeoArrow geometry node array (see
+    ** ``WkbGeoArrowGeometry``) and initializes the stored
+    ** ``s2geography::GeoArrowGeography`` from a view of those nodes.
+    **
+    ** Note: this is a separate, currently self-contained representation.
+    ** Unlike the constructor above, it does not populate ``geog()`` (i.e.,
+    ** the ``s2geography::Geography``-based representation): methods that
+    ** rely on it (``geog()``, ``geog_index()``, ``clone()``, ``encode()``,
+    ** ...) are not usable on a ``Geography`` constructed this way.
+    */
+    explicit Geography(std::string wkb);
+
     Geography& operator=(const Geography&) = delete;
     Geography& operator=(Geography&& other) {
         m_s2geog_ptr = std::move(other.m_s2geog_ptr);
+        m_wkb_geom_ptr = std::move(other.m_wkb_geom_ptr);
+        m_geoarrow_geog_ptr = std::move(other.m_geoarrow_geog_ptr);
         m_is_empty = other.m_is_empty;
         m_geog_type = other.m_geog_type;
         return *this;
@@ -72,6 +97,20 @@ public:
 
     inline const s2geog::Geography& geog() const noexcept {
         return *m_s2geog_ptr;
+    }
+
+    /// \brief Returns true if this Geography was built from a WKB buffer via
+    /// the alternative GeoArrow-based constructor.
+    inline bool has_geoarrow_geog() const noexcept {
+        return m_geoarrow_geog_ptr != nullptr;
+    }
+
+    inline const s2geog::GeoArrowGeography& geoarrow_geog() const noexcept {
+        return *m_geoarrow_geog_ptr;
+    }
+
+    inline const WkbGeoArrowGeometry& wkb_geom() const noexcept {
+        return *m_wkb_geom_ptr;
     }
 
     template <class T>
@@ -112,6 +151,13 @@ public:
 private:
     S2GeographyPtr m_s2geog_ptr;
     S2GeographyIndexPtr m_s2geog_index_ptr;
+
+    // Alternative representation built by the WKB-based constructor (see
+    // above). m_wkb_geom_ptr owns the WKB buffer and parsed GeoArrow geometry
+    // nodes that m_geoarrow_geog_ptr's view points into, so it must outlive it.
+    std::unique_ptr<WkbGeoArrowGeometry> m_wkb_geom_ptr;
+    GeoArrowGeographyPtr m_geoarrow_geog_ptr;
+
     bool m_is_empty = false;
     GeographyType m_geog_type;
 

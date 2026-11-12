@@ -81,6 +81,14 @@ private:
     std::shared_ptr<s2geog::WKBWriter> m_writer;
 };
 
+// Experimental: creates a single Geography from WKB via the GeoArrow-based
+// Geography(std::string) constructor, instead of going through FromWKB /
+// s2geography::WKBReader above.
+PyObjectGeography new_geog_from_wkb(py::bytes wkb) {
+    auto geog_ptr = std::make_unique<Geography>(std::string(wkb));
+    return PyObjectGeography::from_geog(std::move(geog_ptr));
+}
+
 void init_io(py::module& m) {
     m.def(
         "from_wkt",
@@ -214,6 +222,31 @@ void init_io(py::module& m) {
         -------
         bytes or array
             A bytes object or an array of bytes.
+
+    )pbdoc");
+
+    m.def("new_geog_from_wkb",
+          &new_geog_from_wkb,
+          py::arg("wkb"),
+          py::pos_only(),
+          R"pbdoc(new_geog_from_wkb(wkb, /)
+
+        Creates a single geography from a WKB buffer (experimental).
+
+        Unlike :py:func:`from_wkb`, this builds the geography via
+        ``s2geography::GeoArrowGeography`` instead of
+        ``s2geography::Geography``, does not operate on arrays, and does not
+        support the ``oriented``/``planar``/``tessellate_tolerance`` options.
+
+        Parameters
+        ----------
+        wkb : bytes
+            The WKB byte buffer to convert.
+
+        Returns
+        -------
+        Geography
+            A single geography object.
 
     )pbdoc");
 }

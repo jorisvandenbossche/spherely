@@ -168,6 +168,52 @@ void Geography::extract_geog_properties() {
     }
 }
 
+namespace {
+
+// Maps a GeoArrow geometry type tag to the corresponding spherely::GeographyType.
+//
+// Unlike Geography::extract_geog_properties(), this does not collapse a
+// MULTIPOINT/MULTILINESTRING/MULTIPOLYGON containing a single element to its
+// non-multi counterpart: it reflects the type as encoded in the WKB buffer.
+GeographyType geoarrow_to_geog_type(uint8_t geoarrow_geometry_type) {
+    switch (geoarrow_geometry_type) {
+        case GEOARROW_GEOMETRY_TYPE_POINT:
+            return GeographyType::Point;
+        case GEOARROW_GEOMETRY_TYPE_LINESTRING:
+            return GeographyType::LineString;
+        case GEOARROW_GEOMETRY_TYPE_POLYGON:
+            return GeographyType::Polygon;
+        case GEOARROW_GEOMETRY_TYPE_MULTIPOINT:
+            return GeographyType::MultiPoint;
+        case GEOARROW_GEOMETRY_TYPE_MULTILINESTRING:
+            return GeographyType::MultiLineString;
+        case GEOARROW_GEOMETRY_TYPE_MULTIPOLYGON:
+            return GeographyType::MultiPolygon;
+        case GEOARROW_GEOMETRY_TYPE_GEOMETRYCOLLECTION:
+            return GeographyType::GeometryCollection;
+        default:
+            return GeographyType::None;
+    }
+}
+
+}  // namespace
+
+Geography::Geography(std::string wkb)
+    : m_wkb_geom_ptr(std::make_unique<WkbGeoArrowGeometry>(std::move(wkb))) {
+    // Binary-compatible reinterpretation of the parsed GeoArrow geometry nodes
+    // as s2geography's own (separately declared, global-scope) struct types --
+    // see the comment on WkbGeoArrowGeometry for why this indirection exists.
+    struct GeoArrowGeometryView view;
+    view.root = reinterpret_cast<const struct GeoArrowGeometryNode*>(m_wkb_geom_ptr->root());
+    view.size_nodes = m_wkb_geom_ptr->size_nodes();
+
+    m_geoarrow_geog_ptr = std::make_unique<s2geog::GeoArrowGeography>();
+    m_geoarrow_geog_ptr->Init(view);
+
+    m_geog_type = geoarrow_to_geog_type(m_geoarrow_geog_ptr->geometry_type());
+    m_is_empty = m_geoarrow_geog_ptr->is_empty();
+}
+
 py::tuple Geography::encode() const {
     // encode geography type
     using IntType = std::underlying_type_t<GeographyType>;
@@ -309,6 +355,9 @@ void init_geography(py::module& m) {
     )pbdoc");
 
     pygeography.def("__repr__", [](const Geography& geog) {
+        if (geog.has_geoarrow_geog()) {
+            return geog.wkb_geom().to_wkt(6);
+        }
         s2geog::WKTWriter writer(6);
         return writer.write_feature(geog.geog());
     });

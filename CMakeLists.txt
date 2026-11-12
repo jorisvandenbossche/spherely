@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.15...3.25)
 project(
   "${SKBUILD_PROJECT_NAME}"
-  LANGUAGES CXX
+  LANGUAGES CXX C
   VERSION "${SKBUILD_PROJECT_VERSION}")
 
 set(CMAKE_CXX_STANDARD 17 CACHE STRING "The C++ standard to build with")
@@ -40,6 +40,42 @@ else()
   message(FATAL_ERROR "Couldn't find s2geography")
 endif()
 
+# geoarrow-c: used directly (i.e. not through s2geography) for its GeoArrow-C WKB
+# reader and WKT writer, which are not exposed through s2geography's public
+# headers. The 'geoarrow-c' conda package ships the library as C sources
+# alongside its Python bindings rather than as a conventional
+# installed/CMake-discoverable C library, so we locate and compile the handful
+# of sources we need directly.
+execute_process(
+  COMMAND "${Python_EXECUTABLE}" -c "import geoarrow.c, os; print(os.path.dirname(geoarrow.c.__file__))"
+  OUTPUT_VARIABLE GEOARROW_C_PACKAGE_DIR
+  OUTPUT_STRIP_TRAILING_WHITESPACE
+  RESULT_VARIABLE GEOARROW_C_FIND_RESULT)
+if(NOT GEOARROW_C_FIND_RESULT EQUAL 0)
+  message(FATAL_ERROR "Couldn't locate the 'geoarrow-c' Python package (needed for its "
+                      "GeoArrow-C library sources). Please install the 'geoarrow-c' conda "
+                      "package in the build environment.")
+endif()
+message(STATUS "Found geoarrow-c sources: ${GEOARROW_C_PACKAGE_DIR}")
+
+set(GEOARROW_C_SOURCE_DIR "${GEOARROW_C_PACKAGE_DIR}/geoarrow")
+
+add_library(geoarrow_wkb STATIC
+  "${GEOARROW_C_SOURCE_DIR}/wkb_reader.c"
+  "${GEOARROW_C_SOURCE_DIR}/wkt_writer.c"
+  "${GEOARROW_C_SOURCE_DIR}/geometry.c"
+  "${GEOARROW_C_SOURCE_DIR}/util.c"
+  "${GEOARROW_C_SOURCE_DIR}/visitor.c"
+  "${GEOARROW_C_SOURCE_DIR}/double_print.c"
+  "${GEOARROW_C_SOURCE_DIR}/ryu/d2s.c"
+  "${GEOARROW_C_SOURCE_DIR}/nanoarrow/nanoarrow.c")
+target_include_directories(geoarrow_wkb PUBLIC "${GEOARROW_C_PACKAGE_DIR}" "${GEOARROW_C_SOURCE_DIR}")
+set_target_properties(geoarrow_wkb PROPERTIES
+  C_STANDARD 99
+  C_STANDARD_REQUIRED ON
+  C_VISIBILITY_PRESET hidden
+  POSITION_INDEPENDENT_CODE ON)
+
 if(SPHERELY_CODE_COVERAGE)
   message(STATUS "Building spherely with coverage enabled")
   add_library(coverage_config INTERFACE)
@@ -77,7 +113,8 @@ set(CPP_SOURCES
   src/geography.cpp
   src/io.cpp
   src/predicates.cpp
-  src/spherely.cpp)
+  src/spherely.cpp
+  src/wkb_geoarrow.cpp)
 
 if(${s2geography_VERSION} VERSION_GREATER_EQUAL "0.2.0")
     set(CPP_SOURCES ${CPP_SOURCES} src/geoarrow.cpp src/projections.cpp)
@@ -94,7 +131,7 @@ target_compile_definitions(
   S2GEOGRAPHY_VERSION_MINOR=${s2geography_VERSION_MINOR})
 
 target_link_libraries(spherely
-  PRIVATE pybind11::module pybind11::lto pybind11::windows_extras
+  PRIVATE pybind11::module pybind11::lto pybind11::windows_extras geoarrow_wkb
   PUBLIC s2::s2 s2geography
   )
 

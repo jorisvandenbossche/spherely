@@ -39,11 +39,13 @@ warn_unused_ignores = true
 
 [tool.pixi.workspace]
 channels = ["conda-forge"]
-platforms = ["linux-64", "osx-arm64", "osx-64", "win-64"]
+platforms = ["linux-64"] #, "osx-arm64", "osx-64", "win-64"]
+preview = ["pixi-build"]
 
 [tool.pixi.environments]
 default = {features = [], solve-group = "default"}
 dev = {features = ["dev"], solve-group = "default"}
+# dev-local = {features = ["dev", "s2geog-local"]}
 test = {features = ["test", "dev"], solve-group = "default"}
 doc = {features = ["doc", "dev"], solve-group = "default"}
 lint = {features = ["lint", "dev"], solve-group = "default"}
@@ -51,6 +53,7 @@ all = {features = ["lint", "doc", "test", "dev"], solve-group = "default"}
 
 [tool.pixi.dependencies]
 numpy = "*"
+pip = ">=26.2.1,<27"
 
 [tool.pixi.feature.dev.dependencies]
 cxx-compiler = ">=1.9.0,<2"
@@ -58,14 +61,20 @@ cmake = ">=3.31.5,<4"
 ninja = ">=1.12.1,<2"
 pybind11 = ">=2.13.6,<3"
 scikit-build-core = ">=0.10.7,<0.11"
-s2geometry = ">=0.11.1,<0.12"
-s2geography = ">=0.2.0,<0.3"
+s2geometry = ">=0.11,<0.14"
+geoarrow-c = "*"
 
-[tool.pixi.feature.dev.pypi-dependencies]
-spherely = { path = ".", editable = true }
+# [tool.pixi.feature.s2geog-conda.dependencies]
+# s2geography = "*"
 
-[tool.pixi.feature.dev.pypi-options]
-no-build-isolation = ["spherely"]
+# [tool.pixi.feature.s2geog-local.dependencies]
+# s2geography = { path = "../s2geography" } 
+
+# [tool.pixi.feature.dev.pypi-dependencies]
+# spherely = { path = ".", editable = true }
+
+# [tool.pixi.feature.dev.pypi-options]
+# no-build-isolation = ["spherely"]
 
 [tool.pixi.feature.test.dependencies]
 pytest = ">=8.3.4,<9"
